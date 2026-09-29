@@ -1,0 +1,15 @@
+# Virtual environment (everyone creates their own)
+.venv/
+
+# Original test media contains real, un-anonymized faces - never upload
+test_media/
+
+# Output folder (debug images show un-anonymized faces)
+output/
+
+# Test files for error handling
+error_tests/
+
+# Python cache files
+__pycache__/
+*.pyc
