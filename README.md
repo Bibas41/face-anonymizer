@@ -4,7 +4,7 @@ A Python mini-application that **detects human faces in images, video files and 
 
 Built for the *Applied AI Programming (TX00FM14)* course at Metropolia University of Applied Sciences.
 
-**Demo video:** _add link here_
+**Demo video:** https://youtu.be/LXxFFbdC5Ho
 
 | Blur | Pixelate | Mask |
 |---|---|---|
@@ -35,7 +35,7 @@ Tested on Windows 11 with Python 3.12.10, MediaPipe 1.0.1 and OpenCV 5.0.
 
 ```bash
 # 1. Get the code
-git clone https://github.com/Bibas41/face-anonymizer.git
+git clone https://github.com/<your-username>/face-anonymizer.git
 cd face-anonymizer
 
 # 2. Create and activate a virtual environment
@@ -160,15 +160,17 @@ All test media was recorded by me for this project, with the consent of everyone
 
 ### Still images
 
-| Test image | Condition | Faces expected | Faces detected | Confidence | Result |
-|---|---|---|---|---|---|
-| `single_face.jpg` | Close, frontal, normal light | 1 | 1 | 0.95 | ✅ |
-| `multiple_faces.jpg` | Two people | 2 | 2 | 0.96, 0.93 | ✅ |
-| `no_face.jpg` | Desk and bed, no people | 0 | 0 | – | ✅ no crash, no false positive |
-| `side_look.jpg` | Head turned sideways | 1 | 1 | 0.86 | ✅ padding covers ear and hair |
-| `dark.jpg` | Lights dimmed | 1 | 1 | 0.83 | ✅ |
-| `sunglasses_hat.jpg` | Sunglasses + beanie | 1 | 1 | 0.67 | ✅ lower confidence |
-| `far_backlit.jpg` | ~3 m away, bright light behind | 1 | 1 | 0.46 | ✅ but only just above threshold |
+| Test image | Condition | Faces expected | Faces detected | Confidence (whole frame only) | Confidence (final, with tiles) | Result |
+|---|---|---|---|---|---|---|
+| `single_face.jpg` | Close, frontal, normal light | 1 | 1 | 0.95 | 0.97 | ✅ |
+| `multiple_faces.jpg` | Two people | 2 | 2 | 0.96, 0.93 | 0.96, 0.96 | ✅ |
+| `no_face.jpg` | Desk and bed, no people | 0 | 0 | – | – | ✅ no crash, no false positive |
+| `side_look.jpg` | Head turned sideways | 1 | 1 | 0.86 | 0.89 | ✅ padding covers ear and hair |
+| `dark.jpg` | Lights dimmed | 1 | 1 | 0.83 | 0.97 | ✅ |
+| `sunglasses_hat.jpg` | Sunglasses + beanie | 1 | 1 | 0.67 | 0.94 | ✅ |
+| `far_backlit.jpg` | ~3 m away, bright light behind | 1 | 1 | 0.46 | 0.46 | ✅ but only just above the threshold, imprecise box |
+
+The first confidence column is from my first test run, before I added tiled detection; the second is the final version. **Tiling raised the confidence for most photos**, because in a zoomed tile the face fills more of the model's 128×128 input. The distant, backlit face was not improved by tiling and was only caught because of the lowered threshold (see next section).
 
 ### Settings comparison: a real false negative
 
@@ -179,18 +181,18 @@ python anonymizer.py --input test_media\far_backlit.jpg --confidence 0.5 --tiles
 [IMAGE] far_backlit.jpg: 0 face(s) detected
 ```
 
-**The face was missed and stayed fully visible.** With the project's settings (confidence 0.4 + tiles) it was detected and blurred. This is the main reason for the lower threshold and the tiling.
+**The face was missed and stayed fully visible.** With the project's settings it was detected (confidence 0.46) and blurred. Because 0.46 is below MediaPipe's default threshold of 0.5, this photo shows directly why I lowered the threshold to 0.4. (Tiling made the difference in the video test below.)
 
 ### Video: `two_people.mp4` (1280×720, 19 FPS, 140 frames, two people 2–4 m from the camera)
 
 | Setting | Frames with a detection | Detections | Max faces / frame | Speed |
 |---|---|---|---|---|
 | Whole frame only (`--tiles 0`) | 102 / 140 | 144 | 3 | 36.6 FPS |
-| Whole frame + 2×2 tiles (default) | **137 / 140** | 283 | 5 | 15–16 FPS |
+| Whole frame + 2×2 tiles (default) | **137 / 140** | 283 | 5 | 15–18 FPS |
 
 - **Without tiles**, the second person's face was clearly **visible in several moments** (false negatives), because the faces were too small for the short-range model.
 - **With tiles**, both faces were covered in every frame I checked. The 3 frames without a detection are when both people have their backs to the camera, so there was no face to hide.
-- Even with tiles, processing (15–16 FPS) is close to the video's own frame rate.
+- Even with tiles, processing (15–18 FPS on a laptop CPU) is close to the video's own frame rate of 19 FPS.
 
 ### Webcam
 
@@ -220,6 +222,18 @@ In every case the program printed a clear message and did not crash.
 - **False negatives (missed faces)** are the more serious error, because they leave a person identifiable. Observed causes: **small, distant faces** (fixed with tiling and a lower threshold), and **fast movement or head turns** in video (reduced by keeping boxes for 5 frames). Faces turned fully away are not detected, which is correct since no face is visible.
 - **False positives (non-faces blurred)** are less harmful. Observed: **a cartoon face printed on a T-shirt** was sometimes detected as a face (confidence around 0.4–0.5), and for distant faces the whole-frame pass sometimes returned **oversized boxes**, blurring part of the background. I chose to keep these: blurring too much is better than blurring too little.
 - Lowering the threshold trades more false positives for fewer false negatives. For a privacy tool, that is the right direction.
+
+---
+
+## What kinds of inputs work well
+
+- **Faces within about 2–3 m of the camera**, which covers selfies, webcam use, group photos and typical phone videos. Confidence was 0.89–0.97 in all such tests.
+- **Frontal and moderately turned faces** (side views up to roughly 60–90°).
+- **Normal and dim indoor lighting**, and faces partly covered by **glasses, sunglasses or a hat**.
+- **Several people in one frame**, as long as each face is reasonably visible.
+- **Common formats**: JPG/PNG/BMP/WEBP images and MP4/AVI/MOV/MKV video at typical resolutions (tested with 1280×720).
+
+Harder inputs, which work less reliably, are listed under *Limitations*.
 
 ---
 
